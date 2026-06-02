@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anime Music Player</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --crimson:    #b91c1c;
+    --deep-red:   #7f1d1d;
+    --blood:      #dc2626;
+    --ember:      #ef4444;
+    --dark-void:  #0a0a0f;
+    --dark-card:  #12070a;
+    --surface:    rgba(20, 5, 8, 0.85);
+    --border:     rgba(185, 28, 28, 0.35);
+    --text-muted: rgba(220, 180, 180, 0.6);
+    --glow:       rgba(185, 28, 28, 0.4);
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 20% 50%, #3b0000 0%, #0a0a0f 50%, #0d0011 100%);
+    font-family: 'Crimson Pro', Georgia, serif;
+    overflow: hidden;
+  }
+
+  /* Animated background particles */
+  .bg-particles {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--crimson);
+    opacity: 0;
+    animation: float-particle linear infinite;
+  }
+
+  @keyframes float-particle {
+    0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+    10%  { opacity: 0.6; }
+    90%  { opacity: 0.3; }
+    100% { transform: translateY(-10vh) scale(1.2); opacity: 0; }
+  }
+
+  /* Sweeping scan line */
+  .scanline {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(185,28,28,0.015) 3px,
+      rgba(185,28,28,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Card */
+  .player-card {
+    position: relative;
+    z-index: 2;
+    width: 340px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 32px 28px 28px;
+    backdrop-filter: blur(20px);
+    box-shadow:
+      0 0 60px rgba(185,28,28,0.2),
+      0 0 120px rgba(185,28,28,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* Top accent line */
+  .player-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 40px; right: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--crimson), transparent);
+    border-radius: 0 0 4px 4px;
+  }
+
+  /* Cover art */
+  .cover-wrap {
+    display: flex;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 4px;
+  }
+
+  .cover-aura {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(185,28,28,0.5) 0%, transparent 70%);
+    animation: pulse-aura 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-aura {
+    0%, 100% { transform: translate(-50%,-50%) scale(1);   opacity: 0.5; }
+    50%       { transform: translate(-50%,-50%) scale(1.18); opacity: 0.9; }
+  }
+
+  .cover-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 188px; height: 188px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(220,38,38,0.5);
+    animation: spin-ring 12s linear infinite;
+  }
+
+  .cover-ring.paused { animation-play-state: paused; }
+
+  @keyframes spin-ring {
+    from { transform: translate(-50%,-50%) rotate(0deg); }
+    to   { transform: translate(-50%,-50%) rotate(360deg); }
+  }
+
+  .cover-ring::before {
+    content: '';
+    position: absolute;
+    top: -3px; left: 50%;
+    width: 6px; height: 6px;
+    background: var(--ember);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--ember);
+    transform: translateX(-50%);
+  }
+
+  #cover {
+    width: 168px; height: 168px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 3px solid rgba(185,28,28,0.8);
+    display: block;
+    animation: spin-cover 10s linear infinite;
+    box-shadow: 0 0 24px rgba(185,28,28,0.6);
+  }
+
+  #cover.paused { animation-play-state: paused; }
+
+  @keyframes spin-cover {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  /* Center hole on cover */
+  .cover-hole {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 18px; height: 18px;
+    background: var(--dark-card);
+    border-radius: 50%;
+    border: 2px solid rgba(185,28,28,0.6);
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  /* Song info */
+  .song-info {
+    text-align: center;
+    margin-top: 22px;
+  }
+
+  .label-track {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--crimson);
+    font-family: 'Cinzel', serif;
+    margin-bottom: 6px;
+  }
+
+  #songTitle {
+    font-family: 'Cinzel', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    text-shadow: 0 0 20px rgba(220,38,38,0.5);
+  }
+
+  #artist {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--text-muted);
+    margin-top: 4px;
+    letter-spacing: 0.06em;
+  }
+
+  /* Divider */
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 20px 0 16px;
+  }
+
+  /* Time display */
+  .time-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+
+  /* Progress bar */
+  .progress-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    overflow: visible;
+  }
+
+  .progress-track:hover #progress { height: 6px; margin-top: -1px; }
+
+  #progress {
+    height: 4px;
+    background: linear-gradient(90deg, var(--deep-red), var(--ember));
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.25s ease;
+    position: relative;
+    pointer-events: none;
+  }
+
+  #progress::after {
+    content: '';
+    position: absolute;
+    right: -4px; top: 50%;
+    transform: translateY(-50%);
+    width: 10px; height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    border: 2px solid var(--ember);
+    box-shadow: 0 0 6px var(--ember);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .progress-track:hover #progress::after { opacity: 1; }
+
+  /* Volume row */
+  .volume-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .vol-icon {
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  #volumeSlider {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 3px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.1);
+    outline: none;
+    cursor: pointer;
+  }
+
+  #volumeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--crimson);
+    cursor: pointer;
+    border: 1.5px solid rgba(255,255,255,0.3);
+  }
+
+  #volumeSlider::-moz-range-thumb {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--crimson);
+    cursor: pointer;
+    border: 1.5px solid rgba(255,255,255,0.3);
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .btn-skip {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: rgba(220,180,180,0.5);
+    font-size: 20px;
+    line-height: 1;
+    padding: 8px;
+    border-radius: 50%;
+    transition: color 0.2s, transform 0.1s;
+  }
+
+  .btn-skip:hover { color: rgba(220,180,180,0.9); transform: scale(1.1); }
+  .btn-skip:active { transform: scale(0.95); }
+
+  .btn-play {
+    width: 58px; height: 58px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--crimson), var(--deep-red));
+    border: 1.5px solid rgba(220,38,38,0.6);
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 0 20px rgba(185,28,28,0.5), 0 4px 12px rgba(0,0,0,0.5);
+    flex-shrink: 0;
+  }
+
+  .btn-play:hover {
+    transform: scale(1.07);
+    box-shadow: 0 0 32px rgba(185,28,28,0.8), 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  .btn-play:active { transform: scale(0.96); }
+
+  /* Playing indicator dots */
+  .playing-dots {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 16px;
+    margin-top: 12px;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .playing-dots.active { opacity: 1; }
+
+  .dot {
+    width: 3px;
+    border-radius: 2px;
+    background: var(--crimson);
+    animation: bar-bounce 0.8s ease-in-out infinite;
+  }
+
+  .dot:nth-child(1) { height: 8px;  animation-delay: 0s; }
+  .dot:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+  .dot:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+  .dot:nth-child(4) { height: 16px; animation-delay: 0.1s; }
+  .dot:nth-child(5) { height: 6px;  animation-delay: 0.25s; }
+
+  @keyframes bar-bounce {
+    0%, 100% { transform: scaleY(0.4); }
+    50%       { transform: scaleY(1); }
+  }
+
+</style>
+</head>
+<body>
+
+<!-- Background particles -->
+<div class="bg-particles" id="bgParticles"></div>
+<div class="scanline"></div>
+
+<div class="player-card">
+
+  <!-- Cover Art -->
+  <div class="cover-wrap">
+    <div class="cover-aura"></div>
+    <div class="cover-ring paused" id="coverRing"></div>
+    <img
+      id="cover"
+      src="https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400&h=400&fit=crop"
+      alt="Album Art"
+      class="paused">
+    <div class="cover-hole"></div>
+  </div>
+
+  <!-- Playing indicator -->
+  <div class="playing-dots" id="playingDots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <!-- Song Info -->
+  <div class="song-info">
+    <div class="label-track">Now Playing</div>
+    <h2 id="songTitle">Crimson Dreams</h2>
+    <p id="artist">Akame OST</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Time -->
+  <div class="time-row">
+    <span id="currentTime">0:00</span>
+    <span id="totalTime">0:00</span>
+  </div>
+
+  <!-- Progress Bar -->
+  <div class="progress-track" id="progressTrack">
+    <div id="progress"></div>
+  </div>
+
+  <!-- Volume -->
+  <div class="volume-row">
+    <span class="vol-icon">♪</span>
+    <input type="range" id="volumeSlider" min="0" max="100" value="80" step="1">
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn-skip" id="prevBtn" aria-label="Previous track">⏮</button>
+    <button class="btn-play" id="playBtn" aria-label="Play">▶</button>
+    <button class="btn-skip" id="nextBtn" aria-label="Next track">⏭</button>
+  </div>
+
+</div>
+
+<!-- Audio element -->
+<audio id="audio" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" preload="metadata"></audio>
+
+<script>
+const tracks = [
+  {
+    title: "Crimson Dreams",
+    artist: "Akame OST",
+    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    cover: "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400&h=400&fit=crop"
+  },
+  {
+    title: "Void of Eternity",
+    artist: "Demon Slayer Suite",
+    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    cover: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&h=400&fit=crop"
+  },
+  {
+    title: "Blood Moon Rising",
+    artist: "Attack on Titan EP",
+    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    cover: "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=400&h=400&fit=crop"
+  }
+];
+
+let currentTrack = 0;
+let playing = false;
+
+const audio       = document.getElementById("audio");
+const playBtn     = document.getElementById("playBtn");
+const prevBtn     = document.getElementById("prevBtn");
+const nextBtn     = document.getElementById("nextBtn");
+const progress    = document.getElementById("progress");
+const progressTrack = document.getElementById("progressTrack");
+const cover       = document.getElementById("cover");
+const coverRing   = document.getElementById("coverRing");
+const songTitle   = document.getElementById("songTitle");
+const artist      = document.getElementById("artist");
+const currentTime = document.getElementById("currentTime");
+const totalTime   = document.getElementById("totalTime");
+const volumeSlider = document.getElementById("volumeSlider");
+const playingDots = document.getElementById("playingDots");
+
+function formatTime(s) {
+  if (isNaN(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ":" + (sec < 10 ? "0" : "") + sec;
+}
+
+function loadTrack(index) {
+  const t = tracks[index];
+  songTitle.textContent = t.title;
+  artist.textContent    = t.artist;
+  cover.src             = t.src ? cover.src : t.cover;
+  cover.src             = t.cover;
+  audio.src             = t.src;
+  progress.style.width  = "0%";
+  currentTime.textContent = "0:00";
+  totalTime.textContent   = "0:00";
+}
+
+function setPlaying(state) {
+  playing = state;
+  if (state) {
+    audio.play();
+    playBtn.textContent = "⏸";
+    cover.classList.remove("paused");
+    coverRing.classList.remove("paused");
+    playingDots.classList.add("active");
+  } else {
+    audio.pause();
+    playBtn.textContent = "▶";
+    cover.classList.add("paused");
+    coverRing.classList.add("paused");
+    playingDots.classList.remove("active");
+  }
+}
+
+playBtn.addEventListener("click", () => setPlaying(!playing));
+
+prevBtn.addEventListener("click", () => {
+  currentTrack = (currentTrack - 1 + tracks.length) % tracks.length;
+  loadTrack(currentTrack);
+  if (playing) { audio.play(); }
+});
+
+nextBtn.addEventListener("click", () => {
+  currentTrack = (currentTrack + 1) % tracks.length;
+  loadTrack(currentTrack);
+  if (playing) { audio.play(); }
+});
+
+audio.addEventListener("timeupdate", () => {
+  const pct = (audio.currentTime / audio.duration) * 100;
+  progress.style.width = (isNaN(pct) ? 0 : pct) + "%";
+  currentTime.textContent = formatTime(audio.currentTime);
+});
+
+audio.addEventListener("loadedmetadata", () => {
+  totalTime.textContent = formatTime(audio.duration);
+});
+
+audio.addEventListener("ended", () => {
+  currentTrack = (currentTrack + 1) % tracks.length;
+  loadTrack(currentTrack);
+  audio.play();
+});
+
+// Seekable progress bar
+progressTrack.addEventListener("click", (e) => {
+  const rect = progressTrack.getBoundingClientRect();
+  const ratio = (e.clientX - rect.left) / rect.width;
+  if (audio.duration) {
+    audio.currentTime = ratio * audio.duration;
+  }
+});
+
+// Volume
+audio.volume = volumeSlider.value / 100;
+volumeSlider.addEventListener("input", () => {
+  audio.volume = volumeSlider.value / 100;
+});
+
+// Generate background particles
+const container = document.getElementById("bgParticles");
+for (let i = 0; i < 22; i++) {
+  const p = document.createElement("div");
+  p.className = "particle";
+  const size = Math.random() * 4 + 1;
+  p.style.cssText = `
+    width:${size}px; height:${size}px;
+    left:${Math.random() * 100}%;
+    animation-duration:${Math.random() * 10 + 8}s;
+    animation-delay:${Math.random() * 10}s;
+    opacity:${Math.random() * 0.5 + 0.2};
+  `;
+  container.appendChild(p);
+}
+</script>
+</body>
+</html>
